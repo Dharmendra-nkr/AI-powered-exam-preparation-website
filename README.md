@@ -375,7 +375,3 @@ If you encounter any issues or have questions:
 - Refer to the documentation above
 
 ---
-
-**Happy Studying! 🎯📚**
-
-*Made with ❤️ for students everywhere*
