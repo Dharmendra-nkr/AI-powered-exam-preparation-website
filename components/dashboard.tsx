@@ -1,5 +1,7 @@
 "use client"
 
+import type { StudyPlanDay } from "@/lib/ai"
+
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -8,6 +10,15 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { BookOpen, Calendar, Clock, CheckCircle, Lock, Play, Target, TrendingUp, User, Home, Award } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+interface SavedStudyPlan {
+  id: string
+  title?: string
+  examDate: string
+  createdAt: string
+  plan: StudyPlanDay[]
+  files: string[]
+}
 
 interface StudyDay {
   id: number
@@ -24,26 +35,48 @@ export default function Dashboard() {
   const [userName] = useState("Alex")
   const [examDate, setExamDate] = useState("")
   const [studyDays, setStudyDays] = useState<StudyDay[]>([])
+  const [activePlanTitle, setActivePlanTitle] = useState("Study Plan")
   const [currentFilter, setCurrentFilter] = useState<"all" | "upcoming" | "completed">("all")
   const router = useRouter()
 
   useEffect(() => {
-    // Load data from localStorage
-    const storedExamDate = localStorage.getItem("examDate")
-    const storedPlan = localStorage.getItem("studyPlan")
+    try {
+      const savedPlansRaw = localStorage.getItem("studyPlans")
+      const activeId = localStorage.getItem("activePlanId")
+      let selectedPlan: SavedStudyPlan | null = null
 
-    if (storedExamDate && storedPlan) {
-      setExamDate(storedExamDate)
-      try {
-        const parsedPlan = JSON.parse(storedPlan)
-        generateStudyDays(storedExamDate, parsedPlan)
-      } catch (e) {
-        console.error("Failed to parse study plan", e)
+      if (savedPlansRaw) {
+        const parsed = JSON.parse(savedPlansRaw) as SavedStudyPlan[]
+        selectedPlan = parsed.find((plan) => plan.id === activeId) || parsed[0] || null
       }
+
+      if (!selectedPlan) {
+        const legacyPlan = localStorage.getItem("studyPlan")
+        const legacyExamDate = localStorage.getItem("examDate")
+        const legacyFiles = localStorage.getItem("uploadedFiles")
+        if (legacyPlan) {
+          selectedPlan = {
+            id: "legacy",
+            title: "Current Plan",
+            examDate: legacyExamDate || "",
+            createdAt: new Date().toISOString(),
+            plan: JSON.parse(legacyPlan),
+            files: legacyFiles ? JSON.parse(legacyFiles) : [],
+          }
+        }
+      }
+
+      if (selectedPlan) {
+        setExamDate(selectedPlan.examDate)
+        setActivePlanTitle(selectedPlan.title || "Study Plan")
+        generateStudyDays(selectedPlan.plan)
+      }
+    } catch (e) {
+      console.error("Failed to load study plan", e)
     }
   }, [])
 
-  const generateStudyDays = (examDate: string, plan: any[]) => {
+  const generateStudyDays = (plan: StudyPlanDay[]) => {
     const today = new Date()
 
     const days: StudyDay[] = plan.map((dayPlan, index) => {
@@ -92,10 +125,16 @@ export default function Dashboard() {
               </div>
               <span className="text-xl font-bold text-gray-900">SmartExam Prep</span>
             </div>
-            <Button variant="outline" onClick={() => router.push("/dashboard/profile")}>
-              <User className="w-4 h-4 mr-2" />
-              Profile
-            </Button>
+            <div className="flex items-center space-x-3">
+              <Button variant="ghost" onClick={() => router.push("/")}>
+                <Home className="w-4 h-4 mr-2" />
+                Back Home
+              </Button>
+              <Button variant="outline" onClick={() => router.push("/dashboard/profile")}> 
+                <User className="w-4 h-4 mr-2" />
+                Profile
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -105,6 +144,7 @@ export default function Dashboard() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Hi {userName}, here's your plan to ace the exam! 🎯</h1>
           <p className="text-gray-600">Stay consistent and follow your personalized study schedule</p>
+          <p className="text-sm text-gray-500">Current plan: {activePlanTitle}</p>
         </div>
 
         {/* Stats Cards */}
