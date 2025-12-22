@@ -26,15 +26,27 @@ export default function LoginPage() {
     setLoading(true)
     setError("")
 
+    console.log("=== AUTH DEBUG START ===")
+    console.log("Mode:", mode)
+    console.log("Email:", email)
+    console.log("Supabase Client exists:", !!supabaseClient)
+    console.log("NEXT_PUBLIC_SUPABASE_URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
+    console.log("NEXT_PUBLIC_SUPABASE_ANON_KEY exists:", !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+
     if (!supabaseClient) {
-      setError("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.")
+      const errorMsg = "Supabase is not configured. Check browser console for env variables."
+      console.error(errorMsg)
+      console.log("URL:", process.env.NEXT_PUBLIC_SUPABASE_URL)
+      console.log("Key:", process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
+      setError(errorMsg)
       setLoading(false)
       return
     }
 
     try {
       if (mode === "signup") {
-        const { error: signUpError } = await supabaseClient.auth.signUp({
+        console.log("Attempting sign up...")
+        const { data, error: signUpError } = await supabaseClient.auth.signUp({
           email,
           password,
           options: {
@@ -42,17 +54,32 @@ export default function LoginPage() {
             emailRedirectTo: `${window.location.origin}/`,
           },
         })
+        console.log("Sign up response:", { data, error: signUpError })
         if (signUpError) throw signUpError
+        console.log("✅ Sign up successful! User:", data.user?.id)
+        
+        // Check if email confirmation is required
+        if (data.user && !data.session) {
+          alert("✅ Account created! Please check your email to confirm your account before logging in.")
+          setMode("login")
+          return
+        }
       } else {
-        const { error: signInError } = await supabaseClient.auth.signInWithPassword({ email, password })
+        console.log("Attempting sign in...")
+        const { data, error: signInError } = await supabaseClient.auth.signInWithPassword({ email, password })
+        console.log("Sign in response:", { data, error: signInError })
         if (signInError) throw signInError
+        console.log("✅ Sign in successful! User:", data.user?.id)
       }
 
+      console.log("Redirecting to homepage...")
       router.push("/")
     } catch (authError: any) {
+      console.error("❌ Auth error:", authError)
       setError(authError.message || "Authentication failed")
     } finally {
       setLoading(false)
+      console.log("=== AUTH DEBUG END ===")
     }
   }
 
@@ -166,6 +193,16 @@ export default function LoginPage() {
               <Button type="submit" className="w-full h-11 text-base font-semibold" disabled={loading}>
                 {loading ? "Working..." : mode === "login" ? "Sign in" : "Create account"}
               </Button>
+
+              {/* Debug info */}
+              <details className="text-xs text-gray-500 mt-4">
+                <summary className="cursor-pointer">Debug Info</summary>
+                <div className="mt-2 p-2 bg-gray-50 rounded font-mono space-y-1">
+                  <div>Supabase URL: {process.env.NEXT_PUBLIC_SUPABASE_URL || "❌ NOT SET"}</div>
+                  <div>Anon Key: {process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ? "✅ SET" : "❌ NOT SET"}</div>
+                  <div>Client Ready: {supabaseClient ? "✅ YES" : "❌ NO"}</div>
+                </div>
+              </details>
             </form>
 
             <Separator className="my-6" />

@@ -10,7 +10,15 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Upload, Calendar, BookOpen, Target, Clock, CheckCircle, History, ListChecks, ArrowRight } from "lucide-react"
+import { Upload, Calendar, BookOpen, Target, Clock, CheckCircle, History, ListChecks, ArrowRight, LogOut, Settings, User } from "lucide-react"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
 import { supabaseClient } from "@/lib/supabase/client"
 
@@ -32,6 +40,8 @@ export default function LandingPage() {
   const [savedPlans, setSavedPlans] = useState<SavedStudyPlan[]>([])
   const [loadingPlans, setLoadingPlans] = useState(true)
   const [userId, setUserId] = useState<string | null>(null)
+  const [userName, setUserName] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -40,7 +50,10 @@ export default function LandingPage() {
         if (supabaseClient) {
           const { data: sessionData } = await supabaseClient.auth.getSession()
           const supaUserId = sessionData.session?.user?.id || null
+          const user = sessionData.session?.user
           setUserId(supaUserId)
+          setUserEmail(user?.email || null)
+          setUserName(user?.user_metadata?.full_name || user?.email?.split('@')[0] || null)
 
           if (supaUserId) {
             const res = await fetch(`/api/study-plans?userId=${supaUserId}`)
@@ -83,10 +96,14 @@ export default function LandingPage() {
   }
 
   const savePlanRemote = async (plan: SavedStudyPlan) => {
-    if (!userId) return
+    if (!userId) {
+      console.log("User not logged in, plan saved locally only. Sign in to sync to cloud.")
+      return
+    }
 
     try {
-      await fetch("/api/study-plans", {
+      console.log("Saving plan to Supabase for user:", userId)
+      const response = await fetch("/api/study-plans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -97,8 +114,17 @@ export default function LandingPage() {
           plan: plan.plan,
         }),
       })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to save plan")
+      }
+      
+      const result = await response.json()
+      console.log("Plan saved to Supabase successfully:", result)
     } catch (error) {
-      console.error("Failed to sync plan to Supabase", error)
+      console.error("Failed to sync plan to Supabase:", error)
+      alert("Warning: Plan saved locally but failed to sync to cloud. Check console for details.")
     }
   }
 
@@ -108,6 +134,16 @@ export default function LandingPage() {
     localStorage.setItem("studyPlan", JSON.stringify(plan.plan))
     localStorage.setItem("uploadedFiles", JSON.stringify(plan.files))
     router.push("/dashboard")
+  }
+
+  const handleLogout = async () => {
+    if (supabaseClient) {
+      await supabaseClient.auth.signOut()
+    }
+    setUserId(null)
+    setUserName(null)
+    setUserEmail(null)
+    router.push("/login")
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -204,9 +240,46 @@ export default function LandingPage() {
               </div>
               <span className="text-xl font-bold text-gray-900">SmartExam Prep</span>
             </div>
-            <Button variant="outline" size="sm" onClick={() => router.push("/login")}>
-              Sign In
-            </Button>
+            
+            {userId ? (
+              <div className="flex items-center space-x-4">
+                {userName && (
+                  <span className="text-sm text-gray-600 hidden sm:inline">
+                    Welcome, <span className="font-semibold text-gray-900">{userName}</span>
+                  </span>
+                )}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="flex items-center space-x-2">
+                      <User className="w-4 h-4" />
+                      <span className="hidden sm:inline">Account</span>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel>
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium">{userName || "User"}</p>
+                        <p className="text-xs text-gray-500">{userEmail}</p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => router.push("/dashboard/profile")}>
+                      <Settings className="w-4 h-4 mr-2" />
+                      Settings
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="text-red-600">
+                      <LogOut className="w-4 h-4 mr-2" />
+                      Logout
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <Button variant="outline" size="sm" onClick={() => router.push("/login")}>
+                Sign In
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -214,6 +287,9 @@ export default function LandingPage() {
       {/* Hero Section */}
       <section className="container mx-auto px-4 py-16">
         <div className="text-center max-w-4xl mx-auto mb-16">
+          {userName && (
+            <p className="text-lg text-blue-600 font-semibold mb-4">Welcome back, {userName}! 👋</p>
+          )}
           <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6 leading-tight">
             Master Your Exams with a{" "}
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-green-600">
