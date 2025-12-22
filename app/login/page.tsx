@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
 import { BookOpen, ShieldCheck, Sparkles, UserPlus } from "lucide-react"
+import { supabaseClient } from "@/lib/supabase/client"
 
 export default function LoginPage() {
   const [mode, setMode] = useState<"login" | "signup">("login")
@@ -17,17 +18,42 @@ export default function LoginPage() {
   const [password, setPassword] = useState("")
   const [name, setName] = useState("")
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
   const router = useRouter()
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setLoading(true)
+    setError("")
 
-    // Placeholder auth handler. Hook this up to Supabase/Auth provider later.
-    setTimeout(() => {
+    if (!supabaseClient) {
+      setError("Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.")
       setLoading(false)
+      return
+    }
+
+    try {
+      if (mode === "signup") {
+        const { error: signUpError } = await supabaseClient.auth.signUp({
+          email,
+          password,
+          options: {
+            data: { full_name: name },
+            emailRedirectTo: `${window.location.origin}/`,
+          },
+        })
+        if (signUpError) throw signUpError
+      } else {
+        const { error: signInError } = await supabaseClient.auth.signInWithPassword({ email, password })
+        if (signInError) throw signInError
+      }
+
       router.push("/")
-    }, 800)
+    } catch (authError: any) {
+      setError(authError.message || "Authentication failed")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -134,6 +160,8 @@ export default function LoginPage() {
                   By creating an account, you agree to our terms of service and privacy policy.
                 </p>
               )}
+
+              {error && <p className="text-sm text-red-600">{error}</p>}
 
               <Button type="submit" className="w-full h-11 text-base font-semibold" disabled={loading}>
                 {loading ? "Working..." : mode === "login" ? "Sign in" : "Create account"}

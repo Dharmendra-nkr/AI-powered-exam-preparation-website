@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Upload, Calendar, BookOpen, Target, Clock, CheckCircle, History, ListChecks, ArrowRight } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { supabaseClient } from "@/lib/supabase/client"
 
 interface SavedStudyPlan {
   id: string
@@ -30,25 +31,75 @@ export default function LandingPage() {
   const [statusMessage, setStatusMessage] = useState("")
   const [savedPlans, setSavedPlans] = useState<SavedStudyPlan[]>([])
   const [loadingPlans, setLoadingPlans] = useState(true)
+  const [userId, setUserId] = useState<string | null>(null)
   const router = useRouter()
 
   useEffect(() => {
-    try {
-      const storedPlans = localStorage.getItem("studyPlans")
-      if (storedPlans) {
-        const parsed = JSON.parse(storedPlans) as SavedStudyPlan[]
-        setSavedPlans(parsed)
+    const loadPlans = async () => {
+      try {
+        if (supabaseClient) {
+          const { data: sessionData } = await supabaseClient.auth.getSession()
+          const supaUserId = sessionData.session?.user?.id || null
+          setUserId(supaUserId)
+
+          if (supaUserId) {
+            const res = await fetch(`/api/study-plans?userId=${supaUserId}`)
+            if (res.ok) {
+              const body = await res.json()
+              if (Array.isArray(body.plans)) {
+                const normalized = body.plans.map((p: any) => ({
+                  id: p.id,
+                  title: p.title || "Study Plan",
+                  examDate: p.exam_date,
+                  createdAt: p.created_at,
+                  plan: p.plan,
+                  files: p.files || [],
+                })) as SavedStudyPlan[]
+                setSavedPlans(normalized)
+                return
+              }
+            }
+          }
+        }
+
+        const storedPlans = localStorage.getItem("studyPlans")
+        if (storedPlans) {
+          const parsed = JSON.parse(storedPlans) as SavedStudyPlan[]
+          setSavedPlans(parsed)
+        }
+      } catch (error) {
+        console.error("Failed to load saved plans", error)
+      } finally {
+        setLoadingPlans(false)
       }
-    } catch (error) {
-      console.error("Failed to load saved plans", error)
-    } finally {
-      setLoadingPlans(false)
     }
+
+    loadPlans()
   }, [])
 
   const persistPlans = (plans: SavedStudyPlan[]) => {
     setSavedPlans(plans)
     localStorage.setItem("studyPlans", JSON.stringify(plans))
+  }
+
+  const savePlanRemote = async (plan: SavedStudyPlan) => {
+    if (!userId) return
+
+    try {
+      await fetch("/api/study-plans", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          title: plan.title,
+          examDate: plan.examDate,
+          files: plan.files,
+          plan: plan.plan,
+        }),
+      })
+    } catch (error) {
+      console.error("Failed to sync plan to Supabase", error)
+    }
   }
 
   const activatePlan = (plan: SavedStudyPlan) => {
@@ -130,6 +181,7 @@ export default function LandingPage() {
 
       const updatedPlans = [newPlan, ...savedPlans]
       persistPlans(updatedPlans)
+      await savePlanRemote(newPlan)
       activatePlan(newPlan)
     } catch (error: any) {
       console.error("Error generating plan:", error)
