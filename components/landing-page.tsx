@@ -42,6 +42,7 @@ export default function LandingPage() {
   const [userId, setUserId] = useState<string | null>(null)
   const [userName, setUserName] = useState<string | null>(null)
   const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [userAge, setUserAge] = useState<number | null>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -54,6 +55,26 @@ export default function LandingPage() {
           setUserId(supaUserId)
           setUserEmail(user?.email || null)
           setUserName(user?.user_metadata?.full_name || user?.email?.split('@')[0] || null)
+
+          // If logged in, ensure profile exists and fetch age
+          if (supaUserId && supabaseClient) {
+            const { data: profileRows } = await supabaseClient
+              .from('profiles')
+              .select('age')
+              .eq('user_id', supaUserId)
+              .limit(1)
+              .maybeSingle()
+
+            if (!profileRows) {
+              // No profile yet; redirect to onboarding
+              router.push('/onboarding')
+              return
+            }
+
+            if (profileRows?.age) {
+              setUserAge(profileRows.age as number)
+            }
+          }
 
           if (supaUserId) {
             const res = await fetch(`/api/study-plans?userId=${supaUserId}`)
@@ -184,6 +205,9 @@ export default function LandingPage() {
       const formData = new FormData()
       formData.append("file", uploadedFiles[0])
       formData.append("examDate", examDate)
+      if (userAge) {
+        formData.append("age", String(userAge))
+      }
 
       setStatusMessage("Extracting content from PDF...")
       const response = await fetch("/api/generate-plan", {

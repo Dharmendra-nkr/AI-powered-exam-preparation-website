@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import { BookOpen, Calendar, Clock, CheckCircle, Lock, Play, Target, TrendingUp, User, Home, Award } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { supabaseClient } from "@/lib/supabase/client"
 
 interface SavedStudyPlan {
   id: string
@@ -32,12 +33,53 @@ interface StudyDay {
 }
 
 export default function Dashboard() {
-  const [userName] = useState("Alex")
+  const [userName, setUserName] = useState<string | null>(null)
+  const [userEmail, setUserEmail] = useState<string | null>(null)
   const [examDate, setExamDate] = useState("")
   const [studyDays, setStudyDays] = useState<StudyDay[]>([])
   const [activePlanTitle, setActivePlanTitle] = useState("Study Plan")
   const [currentFilter, setCurrentFilter] = useState<"all" | "upcoming" | "completed">("all")
   const router = useRouter()
+
+  // Fetch user data from Supabase
+  useEffect(() => {
+    const loadUserData = async () => {
+      const { data: { session } } = await supabaseClient.auth.getSession()
+      
+      if (session?.user) {
+        const fullName = session.user.user_metadata?.full_name
+        const email = session.user.email
+        
+        if (fullName) {
+          setUserName(fullName)
+        } else if (email) {
+          setUserName(email.split('@')[0])
+        }
+        
+        setUserEmail(email || null)
+
+        // Ensure profile exists (age personalization) else redirect to onboarding
+        if (session.user.id) {
+          const { data: profile } = await supabaseClient
+            .from('profiles')
+            .select('id')
+            .eq('user_id', session.user.id)
+            .limit(1)
+            .maybeSingle()
+
+          if (!profile) {
+            router.push('/onboarding')
+            return
+          }
+        }
+      } else {
+        // Redirect to login if no session
+        router.push('/login')
+      }
+    }
+    
+    loadUserData()
+  }, [router])
 
   useEffect(() => {
     try {

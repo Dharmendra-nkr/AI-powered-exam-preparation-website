@@ -72,8 +72,29 @@ export default function LoginPage() {
         console.log("✅ Sign in successful! User:", data.user?.id)
       }
 
-      console.log("Redirecting to homepage...")
-      router.push("/")
+      // After login, check if profile exists; if not, go to onboarding
+      try {
+        const { data: { session } } = await supabaseClient.auth.getSession()
+        const userId = session?.user?.id
+        if (userId) {
+          const { data: profile } = await supabaseClient
+            .from('profiles')
+            .select('id')
+            .eq('user_id', userId)
+            .limit(1)
+            .maybeSingle()
+
+          if (!profile) {
+            router.push('/onboarding')
+          } else {
+            router.push('/')
+          }
+        } else {
+          router.push('/')
+        }
+      } catch (e) {
+        router.push('/')
+      }
     } catch (authError: any) {
       console.error("❌ Auth error:", authError)
       setError(authError.message || "Authentication failed")
